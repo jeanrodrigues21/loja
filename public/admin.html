@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel Administrativo - Serviços Gerenciamento</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --text-primary: #f8fafc;
+            --text-secondary: #cbd5e1;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        body {
+            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+            color: var(--text-primary);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid rgba(51, 65, 85, 0.3);
+            width: 280px;
+            position: fixed;
+            height: 100vh;
+            left: 0;
+            top: 0;
+            z-index: 40;
+            transition: transform 0.3s ease;
+        }
+
+        .main-content {
+            margin-left: 280px;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .card {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(51, 65, 85, 0.3);
+            border-radius: 16px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 32px 64px -12px rgba(0, 0, 0, 0.6);
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 20px;
+            margin: 4px 12px;
+            border-radius: 12px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .nav-item:hover {
+            background: rgba(51, 65, 85, 0.5);
+            color: var(--text-primary);
+        }
+
+        .nav-item.active {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid rgba(51, 65, 85, 0.5);
+        }
+
+        .input {
+            background: var(--bg-tertiary);
+            border: 1px solid #475569;
+            color: var(--text-primary);
+            padding: 12px 16px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+
+        .input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .input::placeholder {
+            color: var(--text-secondary);
+        }
+
+        .stats-card {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 16px;
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stats-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent), var(--success));
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-content {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-tertiary);
+            padding: 2rem;
+            border-radius: 1rem;
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .table th {
+            background: rgba(51, 65, 85, 0.5);
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(51, 65, 85, 0.3);
+        }
+
+        .table td {
+            padding: 1rem;
+            border-bottom: 1px solid rgba(51, 65, 85, 0.2);
+            color: var(--text-primary);
+        }
+
+        .table tbody tr:hover {
+            background: rgba(51, 65, 85, 0.2);
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="p-6 border-b border-gray-700">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center mr-3">
+                    <i class="fas fa-shield-alt text-white"></i>
+                </div>
+                <div>
+                    <h2 class="text-lg font-bold">Admin Panel</h2>
+                    <p class="text-sm text-gray-400">Gerenciamento</p>
+                </div>
+            </div>
+        </div>
+
+        <nav class="py-4">
+            <div class="nav-item active" onclick="loadSection('dashboard')" data-section="dashboard">
+                <i class="fas fa-chart-line w-5 mr-3"></i>
+                Dashboard
+            </div>
+            <div class="nav-item" onclick="loadSection('users')" data-section="users">
+                <i class="fas fa-users w-5 mr-3"></i>
+                Usuários
+            </div>
+            <div class="nav-item" onclick="loadSection('settings')" data-section="settings">
+                <i class="fas fa-cog w-5 mr-3"></i>
+                Configurações
+            </div>
+            <div class="nav-item" onclick="logout()">
+                <i class="fas fa-sign-out-alt w-5 mr-3"></i>
+                Sair
+            </div>
+        </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div id="content"></div>
+    </main>
+
+    <script>
+        const BASE_URL = '/api';
+        let currentUser = null;
+
+        // Utility Functions
+        function showNotification(message, type = 'success') {
+            const notification = document.createElement('div');
+            notification.className = `fixed top-4 right-4 p-4 rounded-lg text-white z-50 ${
+                type === 'success' ? 'bg-green-500' : 'bg-red-500'
+            }`;
+            notification.innerHTML = `
+                <div class="flex items-center">
+                    <i class="fas fa-${type === 'success' ? 'check' : 'times'} mr-2"></i>
+                    ${message}
+                </div>
+            `;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        function setActiveNav(section) {
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            document.querySelector(`[data-section="${section}"]`).classList.add('active');
+        }
+
+        // API Functions
+        async function fetchApi(endpoint, options = {}) {
+            try {
+                const response = await fetch(`${BASE_URL}${endpoint}`, {
+                    ...options,
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error('API Error:', error);
+                showNotification('Erro ao processar requisição', 'error');
+                if (error.message.includes('401') || error.message.includes('403')) {
+                    window.location.href = '/login.html';
+                }
+                throw error;
+            }
+        }
+
+        // Authentication
+        async function checkAuth() {
+            try {
+                const user = localStorage.getItem('user');
+                if (!user) {
+                    window.location.href = '/login.html';
+                    return false;
+                }
+                currentUser = JSON.parse(user);
+                
+                if (currentUser.role !== 'admin') {
+                    window.location.href = '/index.html';
+                    return false;
+                }
+                
+                return true;
+            } catch (error) {
+                window.location.href = '/login.html';
+                return false;
+            }
+        }
+
+        async function logout() {
+            try {
+                await fetchApi('/logout', { method: 'POST' });
+                localStorage.removeItem('user');
+                window.location.href = '/login.html';
+            } catch (error) {
+                showNotification('Erro ao fazer logout', 'error');
+            }
+        }
+
+        // Dashboard
+        async function loadDashboard() {
+            try {
+                const data = await fetchApi('/admin/dashboard');
+                const html = `
+                    <div class="space-y-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h1 class="text-3xl font-bold">Dashboard Administrativo</h1>
+                                <p class="text-gray-400 mt-1">Visão geral do sistema</p>
+                            </div>
+                        </div>
+
+                        <!-- Stats Cards -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div class="stats-card">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm text-gray-400 mb-2">Total de Usuários</p>
+                                        <p class="text-3xl font-bold">${data.stats.totalUsers}</p>
+                                    </div>
+                                    <i class="fas fa-users text-blue-400 text-2xl"></i>
+                                </div>
+                            </div>
+                            
+                            <div class="stats-card">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm text-gray-400 mb-2">Total de Serviços</p>
+                                        <p class="text-3xl font-bold">${data.stats.totalServices}</p>
+                                    </div>
+                                    <i class="fas fa-wrench text-green-400 text-2xl"></i>
+                                </div>
+                            </div>
+                            
+                            <div class="stats-card">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm text-gray-400 mb-2">Total de Despesas</p>
+                                        <p class="text-3xl font-bold">${data.stats.totalExpenses}</p>
+                                    </div>
+                                    <i class="fas fa-receipt text-red-400 text-2xl"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Recent Users -->
+                        <div class="card p-6">
+                            <div class="flex items-center justify-between mb-6">
+                                <h3 class="text-xl font-bold">Usuários Recentes</h3>
+                                <button onclick="loadSection('users')" class="btn btn-primary">
+                                    <i class="fas fa-users mr-2"></i>
+                                    Ver Todos
+                                </button>
+                            </div>
+                            
+                            <div class="overflow-x-auto">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Nome</th>
+                                            <th>Username</th>
+                                            <th>Email</th>
+                                            <th>Data de Criação</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${data.recentUsers.map(user => `
+                                            <tr>
+                                                <td class="font-medium">${user.name}</td>
+                                                <td class="text-gray-300">${user.username}</td>
+                                                <td class="text-gray-300">${user.email}</td>
+                                                <td class="text-gray-300">${new Date(user.created_at).toLocaleDateString('pt-BR')}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('content').innerHTML = html;
+            } catch (error) {
+                showNotification('Erro ao carregar dashboard', 'error');
+            }
+        }
+
+        // Users Management
+        async function loadUsers() {
+            try {
+                const data = await fetchApi('/admin/users');
+                const html = `
+                    <div class="space-y-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h1 class="text-3xl font-bold">Gerenciar Usuários</h1>
+                                <p class="text-gray-400 mt-1">Adicionar, editar e remover usuários</p>
+                            </div>
+                            <button onclick="showNewUserForm()" class="btn btn-primary">
+                                <i class="fas fa-plus mr-2"></i>
+                                Novo Usuário
+                            </button>
+                        </div>
+
+                        <div class="card p-6">
+                            <div class="overflow-x-auto">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Nome</th>
+                                            <th>Username</th>
+                                            <th>Email</th>
+                                            <th>Data de Criação</th>
+                                            <th>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${data.users.map(user => `
+                                            <tr>
+                                                <td class="font-medium">${user.name}</td>
+                                                <td class="text-gray-300">${user.username}</td>
+                                                <td class="text-gray-300">${user.email}</td>
+                                                <td class="text-gray-300">${new Date(user.created_at).toLocaleDateString('pt-BR')}</td>
+                                                <td>
+                                                    <button onclick="deleteUser(${user.id})" class="btn btn-danger btn-sm">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('content').innerHTML = html;
+            } catch (error) {
+                showNotification('Erro ao carregar usuários', 'error');
+            }
+        }
+
+        function showNewUserForm() {
+            const html = `
+                <div class="modal" id="userModal" style="display: flex;">
+                    <div class="modal-content">
+                        <div class="flex items-center mb-6">
+                            <i class="fas fa-user-plus text-blue-400 text-xl mr-3"></i>
+                            <h3 class="text-lg font-bold">Novo Usuário</h3>
+                        </div>
+                        <form id="userForm" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Nome</label>
+                                <input type="text" id="userName" class="input" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Username</label>
+                                <input type="text" id="userUsername" class="input" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Email</label>
+                                <input type="email" id="userEmail" class="input">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Senha</label>
+                                <input type="password" id="userPassword" class="input" required>
+                            </div>
+                            <div class="flex space-x-2 pt-4">
+                                <button type="submit" class="btn btn-success flex-1">
+                                    <i class="fas fa-save mr-2"></i>
+                                    Salvar
+                                </button>
+                                <button type="button" onclick="closeModal('userModal')" class="btn btn-secondary flex-1">
+                                    Cancelar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', html);
+            setupNewUserForm();
+        }
+
+        function setupNewUserForm() {
+            document.getElementById('userForm').onsubmit = async (e) => {
+                e.preventDefault();
+                const userData = {
+                    name: document.getElementById('userName').value,
+                    username: document.getElementById('userUsername').value,
+                    email: document.getElementById('userEmail').value,
+                    password: document.getElementById('userPassword').value
+                };
+                
+                try {
+                    await fetchApi('/admin/users', {
+                        method: 'POST',
+                        body: JSON.stringify(userData)
+                    });
+                    closeModal('userModal');
+                    showNotification('Usuário criado com sucesso!');
+                    loadUsers();
+                } catch (error) {
+                    showNotification('Erro ao criar usuário', 'error');
+                }
+            };
+        }
+
+        async function deleteUser(id) {
+            if (confirm('Tem certeza que deseja excluir este usuário?')) {
+                try {
+                    await fetchApi(`/admin/users/${id}`, { method: 'DELETE' });
+                    showNotification('Usuário excluído com sucesso!');
+                    loadUsers();
+                } catch (error) {
+                    showNotification('Erro ao excluir usuário', 'error');
+                }
+            }
+        }
+
+        // Settings
+        async function loadSettings() {
+            try {
+                const data = await fetchApi('/admin/settings');
+                const html = `
+                    <div class="space-y-6">
+                        <div>
+                            <h1 class="text-3xl font-bold">Configurações do Sistema</h1>
+                            <p class="text-gray-400 mt-1">Gerenciar configurações gerais</p>
+                        </div>
+
+                        <div class="card p-6">
+                            <h3 class="text-xl font-bold mb-6">Divisão de Lucros</h3>
+                            <form id="settingsForm" class="space-y-4">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-300 mb-2">Nome da Primeira Parte</label>
+                                        <input type="text" id="part1Name" value="${data.settings.part1_name || 'Instalador'}" class="input" required>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-300 mb-2">Nome da Segunda Parte</label>
+                                        <input type="text" id="part2Name" value="${data.settings.part2_name || 'Oficina'}" class="input" required>
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-success">
+                                    <i class="fas fa-save mr-2"></i>
+                                    Salvar Configurações
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('content').innerHTML = html;
+                setupSettingsForm();
+            } catch (error) {
+                showNotification('Erro ao carregar configurações', 'error');
+            }
+        }
+
+        function setupSettingsForm() {
+            document.getElementById('settingsForm').onsubmit = async (e) => {
+                e.preventDefault();
+                const settings = {
+                    part1_name: document.getElementById('part1Name').value,
+                    part2_name: document.getElementById('part2Name').value
+                };
+                
+                try {
+                    await fetchApi('/admin/settings', {
+                        method: 'PUT',
+                        body: JSON.stringify(settings)
+                    });
+                    showNotification('Configurações atualizadas com sucesso!');
+                } catch (error) {
+                    showNotification('Erro ao atualizar configurações', 'error');
+                }
+            };
+        }
+
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.remove();
+            }
+        }
+
+        // Section Loading
+        async function loadSection(section) {
+            setActiveNav(section);
+            switch (section) {
+                case 'dashboard':
+                    await loadDashboard();
+                    break;
+                case 'users':
+                    await loadUsers();
+                    break;
+                case 'settings':
+                    await loadSettings();
+                    break;
+            }
+        }
+
+        // Initialization
+        window.onload = async () => {
+            if (await checkAuth()) {
+                await loadDashboard();
+            }
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,1336 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serviços Gerenciamento</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --text-primary: #f8fafc;
+            --text-secondary: #cbd5e1;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        body {
+            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+            color: var(--text-primary);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid rgba(51, 65, 85, 0.3);
+            width: 280px;
+            position: fixed;
+            height: 100vh;
+            left: 0;
+            top: 0;
+            z-index: 40;
+            transition: transform 0.3s ease;
+        }
+
+        .main-content {
+            margin-left: 280px;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .card {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(51, 65, 85, 0.3);
+            border-radius: 16px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 32px 64px -12px rgba(0, 0, 0, 0.6);
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 20px;
+            margin: 4px 12px;
+            border-radius: 12px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .nav-item:hover {
+            background: rgba(51, 65, 85, 0.5);
+            color: var(--text-primary);
+        }
+
+        .nav-item.active {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid rgba(51, 65, 85, 0.5);
+        }
+
+        .input {
+            background: var(--bg-tertiary);
+            border: 1px solid #475569;
+            color: var(--text-primary);
+            padding: 12px 16px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+
+        .input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .input::placeholder {
+            color: var(--text-secondary);
+        }
+
+        .stats-card {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 16px;
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stats-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent), var(--success));
+        }
+
+        .profit-card {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.8) 0%, rgba(147, 51, 234, 0.8) 100%);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-content {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-tertiary);
+            padding: 2rem;
+            border-radius: 1rem;
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .table th {
+            background: rgba(51, 65, 85, 0.5);
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(51, 65, 85, 0.3);
+        }
+
+        .table td {
+            padding: 1rem;
+            border-bottom: 1px solid rgba(51, 65, 85, 0.2);
+            color: var(--text-primary);
+        }
+
+        .table tbody tr:hover {
+            background: rgba(51, 65, 85, 0.2);
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+        }
+
+        .floating-shapes {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: -1;
+        }
+
+        .shape {
+            position: absolute;
+            background: rgba(59, 130, 246, 0.1);
+            border-radius: 50%;
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .shape:nth-child(1) {
+            width: 80px;
+            height: 80px;
+            top: 20%;
+            left: 10%;
+            animation-delay: 0s;
+        }
+
+        .shape:nth-child(2) {
+            width: 120px;
+            height: 120px;
+            top: 60%;
+            right: 10%;
+            animation-delay: 2s;
+        }
+
+        .shape:nth-child(3) {
+            width: 60px;
+            height: 60px;
+            bottom: 20%;
+            left: 20%;
+            animation-delay: 4s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(180deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="floating-shapes">
+        <div class="shape"></div>
+        <div class="shape"></div>
+        <div class="shape"></div>
+    </div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="p-6 border-b border-gray-700">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center mr-3">
+                    <i class="fas fa-tools text-white"></i>
+                </div>
+                <div>
+                    <h2 class="text-lg font-bold">Serviços</h2>
+                    <p class="text-sm text-gray-400">Gerenciamento</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="p-4 border-b border-gray-700">
+            <div class="text-center">
+                <div class="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <span class="text-white font-bold text-lg" id="userInitials">U</span>
+                </div>
+                <p class="font-semibold" id="userName">Usuário</p>
+                <p class="text-sm text-gray-400">Bem-vindo</p>
+            </div>
+        </div>
+
+        <nav class="py-4">
+            <div class="nav-item active" onclick="loadSection('dashboard')" data-section="dashboard">
+                <i class="fas fa-chart-line w-5 mr-3"></i>
+                Dashboard
+            </div>
+            <div class="nav-item" onclick="loadSection('services')" data-section="services">
+                <i class="fas fa-wrench w-5 mr-3"></i>
+                Serviços
+            </div>
+            <div class="nav-item" onclick="loadSection('expenses')" data-section="expenses">
+                <i class="fas fa-receipt w-5 mr-3"></i>
+                Despesas
+            </div>
+            <div class="nav-item" onclick="loadSection('withdrawals')" data-section="withdrawals">
+                <i class="fas fa-hand-holding-usd w-5 mr-3"></i>
+                Retiradas
+            </div>
+            <div class="nav-item" onclick="loadSection('appointments')" data-section="appointments">
+                <i class="fas fa-calendar w-5 mr-3"></i>
+                Agendamentos
+            </div>
+            <div class="nav-item" onclick="loadSection('settings')" data-section="settings">
+                <i class="fas fa-cog w-5 mr-3"></i>
+                Configurações
+            </div>
+            <div class="nav-item" onclick="logout()">
+                <i class="fas fa-sign-out-alt w-5 mr-3"></i>
+                Sair
+            </div>
+        </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div id="content">
+            <!-- Dashboard será carregado aqui -->
+        </div>
+    </main>
+
+    <script>
+        const BASE_URL = '/api';
+        let currentUser = null;
+        let partNames = { part1: 'Instalador', part2: 'Oficina' };
+
+        // Utility Functions
+        function showNotification(message, type = 'success') {
+            const notification = document.createElement('div');
+            notification.className = `fixed top-4 right-4 p-4 rounded-lg text-white z-50 ${
+                type === 'success' ? 'bg-green-500' : 'bg-red-500'
+            }`;
+            notification.innerHTML = `
+                <div class="flex items-center">
+                    <i class="fas fa-${type === 'success' ? 'check' : 'times'} mr-2"></i>
+                    ${message}
+                </div>
+            `;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        function setActiveNav(section) {
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            document.querySelector(`[data-section="${section}"]`).classList.add('active');
+        }
+
+        // API Functions
+        async function fetchApi(endpoint, options = {}) {
+            try {
+                const response = await fetch(`${BASE_URL}${endpoint}`, {
+                    ...options,
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error('API Error:', error);
+                showNotification('Erro ao processar requisição', 'error');
+                if (error.message.includes('401') || error.message.includes('403')) {
+                    window.location.href = '/login.html';
+                }
+                throw error;
+            }
+        }
+
+        // Authentication
+        async function checkAuth() {
+            try {
+                const user = localStorage.getItem('user');
+                if (!user) {
+                    window.location.href = '/login.html';
+                    return false;
+                }
+                currentUser = JSON.parse(user);
+                
+                // Update user info in sidebar
+                document.getElementById('userName').textContent = currentUser.name;
+                document.getElementById('userInitials').textContent = currentUser.name.charAt(0).toUpperCase();
+                
+                return true;
+            } catch (error) {
+                window.location.href = '/login.html';
+                return false;
+            }
+        }
+
+        async function logout() {
+            try {
+                await fetchApi('/logout', { method: 'POST' });
+                localStorage.removeItem('user');
+                window.location.href = '/login.html';
+            } catch (error) {
+                showNotification('Erro ao fazer logout', 'error');
+            }
+        }
+
+        // Dashboard
+        async function loadDashboard() {
+            try {
+                const data = await fetchApi('/dashboard');
+                partNames = data.partNames;
+                
+                const html = `
+                    <div class="space-y-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h1 class="text-3xl font-bold">Dashboard</h1>
+                                <p class="text-gray-400 mt-1">Visão geral dos seus serviços</p>
+                            </div>
+                            <div class="flex space-x-3">
+                                <button onclick="window.location.href='/service-history'" 
+                                        class="btn btn-secondary">
+                                    <i class="fas fa-chart-line mr-2"></i>
+                                    Histórico
+                                </button>
+                                <button onclick="shareWhatsApp()" 
+                                        class="btn btn-success">
+                                    <i class="fab fa-whatsapp mr-2"></i>
+                                    Compartilhar
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Stats Cards -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                            <div class="stats-card">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm text-gray-400 mb-2">Serviços Ativos</p>
+                                        <p class="text-3xl font-bold">${data.activeServicesCount}</p>
+                                    </div>
+                                    <i class="fas fa-wrench text-blue-400 text-2xl"></i>
+                                </div>
+                            </div>
+                            
+                            <div class="stats-card">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm text-gray-400 mb-2">Receita Total</p>
+                                        <p class="text-2xl font-bold text-green-400">R$ ${data.totalRevenue.toFixed(2)}</p>
+                                    </div>
+                                    <i class="fas fa-arrow-up text-green-400 text-2xl"></i>
+                                </div>
+                            </div>
+                            
+                            <div class="stats-card">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm text-gray-400 mb-2">Despesas Totais</p>
+                                        <p class="text-2xl font-bold text-red-400">R$ ${data.totalExpenses.toFixed(2)}</p>
+                                    </div>
+                                    <i class="fas fa-arrow-down text-red-400 text-2xl"></i>
+                                </div>
+                            </div>
+                            
+                            <div class="profit-card">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm text-blue-100 mb-2">Lucro Total</p>
+                                        <p class="text-2xl font-bold text-white">R$ ${data.totalProfit.toFixed(2)}</p>
+                                    </div>
+                                    <i class="fas fa-chart-line text-white text-2xl"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Profit Division -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="card p-6">
+                                <div class="flex items-center justify-between mb-6">
+                                    <div class="flex items-center">
+                                        <i class="fas fa-user text-green-400 text-xl mr-3"></i>
+                                        <h3 class="text-xl font-bold">${partNames.part1}</h3>
+                                    </div>
+                                </div>
+                                
+                                <div class="space-y-4">
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-400">Parte do lucro:</span>
+                                        <span class="font-bold text-green-400">R$ ${(data.totalProfit / 2).toFixed(2)}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-400">Retiradas:</span>
+                                        <span class="font-bold text-red-400">R$ ${data.withdrawals.part1.toFixed(2)}</span>
+                                    </div>
+                                    <hr class="border-gray-600">
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-300">Disponível:</span>
+                                        <span class="font-bold text-blue-400">R$ ${((data.totalProfit / 2) - data.withdrawals.part1).toFixed(2)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="card p-6">
+                                <div class="flex items-center justify-between mb-6">
+                                    <div class="flex items-center">
+                                        <i class="fas fa-user text-blue-400 text-xl mr-3"></i>
+                                        <h3 class="text-xl font-bold">${partNames.part2}</h3>
+                                    </div>
+                                </div>
+                                
+                                <div class="space-y-4">
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-400">Parte do lucro:</span>
+                                        <span class="font-bold text-green-400">R$ ${(data.totalProfit / 2).toFixed(2)}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-400">Retiradas:</span>
+                                        <span class="font-bold text-red-400">R$ ${data.withdrawals.part2.toFixed(2)}</span>
+                                    </div>
+                                    <hr class="border-gray-600">
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-300">Disponível:</span>
+                                        <span class="font-bold text-blue-400">R$ ${((data.totalProfit / 2) - data.withdrawals.part2).toFixed(2)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Action Cards -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="card p-6">
+                                <div class="flex items-center justify-between mb-6">
+                                    <div class="flex items-center">
+                                        <i class="fas fa-times-circle text-red-400 text-xl mr-3"></i>
+                                        <h3 class="text-xl font-bold">Fechar Período</h3>
+                                    </div>
+                                    <button onclick="closePeriod()" class="btn btn-danger">
+                                        <i class="fas fa-lock mr-2"></i>
+                                        Fechar
+                                    </button>
+                                </div>
+                                <p class="text-gray-400">Finalizar período atual</p>
+                            </div>
+                            
+                            <div class="card p-6">
+                                <div class="flex items-center justify-between mb-6">
+                                    <div class="flex items-center">
+                                        <i class="fas fa-history text-blue-400 text-xl mr-3"></i>
+                                        <h3 class="text-xl font-bold">Histórico Completo</h3>
+                                    </div>
+                                    <button onclick="window.location.href='/service-history'" class="btn btn-primary">
+                                        <i class="fas fa-chart-line mr-2"></i>
+                                        Ver
+                                    </button>
+                                </div>
+                                <p class="text-gray-400">Ver todos os registros</p>
+                            </div>
+                        </div>
+
+                        <!-- Today's Appointments -->
+                        <div class="card p-6">
+                            <div class="flex items-center mb-6">
+                                <i class="fas fa-calendar-day text-indigo-400 text-xl mr-3"></i>
+                                <h3 class="text-xl font-bold">Agendamentos de Hoje</h3>
+                            </div>
+                            
+                            ${data.todaysAppointments.length === 0 ? 
+                                '<p class="text-center text-gray-400 py-8">Sem agendamentos hoje</p>' :
+                                `<div class="overflow-x-auto">
+                                    <table class="table">
+                                        <thead>
+                                            <tr>
+                                                <th>Horário</th>
+                                                <th>Cliente</th>
+                                                <th>Serviço</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${data.todaysAppointments.map(appointment => `
+                                                <tr>
+                                                    <td class="font-medium">${appointment.time}</td>
+                                                    <td>${appointment.client}</td>
+                                                    <td class="text-gray-300">${appointment.service}</td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>`
+                            }
+                        </div>
+                    </div>
+                `;
+                document.getElementById('content').innerHTML = html;
+            } catch (error) {
+                showNotification('Erro ao carregar dashboard', 'error');
+            }
+        }
+
+        // Services
+        async function loadServices() {
+            try {
+                const data = await fetchApi('/services');
+                const html = `
+                    <div class="space-y-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h1 class="text-3xl font-bold">Serviços</h1>
+                                <p class="text-gray-400 mt-1">Gerenciar seus serviços ativos</p>
+                            </div>
+                            <button onclick="showNewServiceForm()" class="btn btn-primary">
+                                <i class="fas fa-plus mr-2"></i>
+                                Novo Serviço
+                            </button>
+                        </div>
+
+                        <div class="card p-6">
+                            <div class="overflow-x-auto">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Descrição</th>
+                                            <th>Veículo</th>
+                                            <th>Valor</th>
+                                            <th>Data</th>
+                                            <th>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${data.services.length === 0 ? 
+                                            '<tr><td colspan="5" class="text-center py-8 text-gray-400">Nenhum serviço encontrado</td></tr>' :
+                                            data.services.map(service => `
+                                                <tr>
+                                                    <td class="font-medium">${service.description}</td>
+                                                    <td>${service.vehicle}</td>
+                                                    <td class="font-bold text-green-400">R$ ${service.price.toFixed(2)}</td>
+                                                    <td class="text-gray-300">${new Date(service.created_at).toLocaleDateString('pt-BR')}</td>
+                                                    <td>
+                                                        <button onclick="deleteService(${service.id})" class="btn btn-danger btn-sm">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            `).join('')
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('content').innerHTML = html;
+            } catch (error) {
+                showNotification('Erro ao carregar serviços', 'error');
+            }
+        }
+
+        function showNewServiceForm() {
+            const html = `
+                <div class="modal" id="serviceModal" style="display: flex;">
+                    <div class="modal-content">
+                        <div class="flex items-center mb-6">
+                            <i class="fas fa-wrench text-blue-400 text-xl mr-3"></i>
+                            <h3 class="text-lg font-bold">Novo Serviço</h3>
+                        </div>
+                        <form id="serviceForm" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Descrição</label>
+                                <input type="text" id="serviceDescription" class="input" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Veículo</label>
+                                <input type="text" id="serviceVehicle" class="input" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Valor</label>
+                                <input type="number" step="0.01" id="servicePrice" class="input" required>
+                            </div>
+                            <div class="flex space-x-2 pt-4">
+                                <button type="submit" class="btn btn-success flex-1">
+                                    <i class="fas fa-save mr-2"></i>
+                                    Salvar
+                                </button>
+                                <button type="button" onclick="closeModal('serviceModal')" class="btn btn-secondary flex-1">
+                                    Cancelar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', html);
+            setupServiceForm();
+        }
+
+        function setupServiceForm() {
+            document.getElementById('serviceForm').onsubmit = async (e) => {
+                e.preventDefault();
+                const serviceData = {
+                    description: document.getElementById('serviceDescription').value,
+                    vehicle: document.getElementById('serviceVehicle').value,
+                    price: parseFloat(document.getElementById('servicePrice').value)
+                };
+                
+                try {
+                    await fetchApi('/services', {
+                        method: 'POST',
+                        body: JSON.stringify(serviceData)
+                    });
+                    closeModal('serviceModal');
+                    showNotification('Serviço criado com sucesso!');
+                    loadServices();
+                } catch (error) {
+                    showNotification('Erro ao criar serviço', 'error');
+                }
+            };
+        }
+
+        async function deleteService(id) {
+            if (confirm('Tem certeza que deseja excluir este serviço?')) {
+                try {
+                    await fetchApi(`/services/${id}`, { method: 'DELETE' });
+                    showNotification('Serviço excluído com sucesso!');
+                    loadServices();
+                } catch (error) {
+                    showNotification('Erro ao excluir serviço', 'error');
+                }
+            }
+        }
+
+        // Expenses
+        async function loadExpenses() {
+            try {
+                const data = await fetchApi('/expenses');
+                const html = `
+                    <div class="space-y-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h1 class="text-3xl font-bold">Despesas</h1>
+                                <p class="text-gray-400 mt-1">Gerenciar suas despesas ativas</p>
+                            </div>
+                            <button onclick="showNewExpenseForm()" class="btn btn-primary">
+                                <i class="fas fa-plus mr-2"></i>
+                                Nova Despesa
+                            </button>
+                        </div>
+
+                        <div class="card p-6">
+                            <div class="overflow-x-auto">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Descrição</th>
+                                            <th>Valor</th>
+                                            <th>Data</th>
+                                            <th>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${data.expenses.length === 0 ? 
+                                            '<tr><td colspan="4" class="text-center py-8 text-gray-400">Nenhuma despesa encontrada</td></tr>' :
+                                            data.expenses.map(expense => `
+                                                <tr>
+                                                    <td class="font-medium">${expense.description}</td>
+                                                    <td class="font-bold text-red-400">R$ ${expense.amount.toFixed(2)}</td>
+                                                    <td class="text-gray-300">${new Date(expense.date).toLocaleDateString('pt-BR')}</td>
+                                                    <td>
+                                                        <button onclick="deleteExpense(${expense.id})" class="btn btn-danger btn-sm">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            `).join('')
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('content').innerHTML = html;
+            } catch (error) {
+                showNotification('Erro ao carregar despesas', 'error');
+            }
+        }
+
+        function showNewExpenseForm() {
+            const html = `
+                <div class="modal" id="expenseModal" style="display: flex;">
+                    <div class="modal-content">
+                        <div class="flex items-center mb-6">
+                            <i class="fas fa-receipt text-red-400 text-xl mr-3"></i>
+                            <h3 class="text-lg font-bold">Nova Despesa</h3>
+                        </div>
+                        <form id="expenseForm" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Descrição</label>
+                                <input type="text" id="expenseDescription" class="input" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Valor</label>
+                                <input type="number" step="0.01" id="expenseAmount" class="input" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Data</label>
+                                <input type="date" id="expenseDate" class="input" required>
+                            </div>
+                            <div class="flex space-x-2 pt-4">
+                                <button type="submit" class="btn btn-success flex-1">
+                                    <i class="fas fa-save mr-2"></i>
+                                    Salvar
+                                </button>
+                                <button type="button" onclick="closeModal('expenseModal')" class="btn btn-secondary flex-1">
+                                    Cancelar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', html);
+            
+            // Set today's date as default
+            document.getElementById('expenseDate').value = new Date().toISOString().split('T')[0];
+            setupExpenseForm();
+        }
+
+        function setupExpenseForm() {
+            document.getElementById('expenseForm').onsubmit = async (e) => {
+                e.preventDefault();
+                const expenseData = {
+                    description: document.getElementById('expenseDescription').value,
+                    amount: parseFloat(document.getElementById('expenseAmount').value),
+                    date: document.getElementById('expenseDate').value
+                };
+                
+                try {
+                    await fetchApi('/expenses', {
+                        method: 'POST',
+                        body: JSON.stringify(expenseData)
+                    });
+                    closeModal('expenseModal');
+                    showNotification('Despesa criada com sucesso!');
+                    loadExpenses();
+                } catch (error) {
+                    showNotification('Erro ao criar despesa', 'error');
+                }
+            };
+        }
+
+        async function deleteExpense(id) {
+            if (confirm('Tem certeza que deseja excluir esta despesa?')) {
+                try {
+                    await fetchApi(`/expenses/${id}`, { method: 'DELETE' });
+                    showNotification('Despesa excluída com sucesso!');
+                    loadExpenses();
+                } catch (error) {
+                    showNotification('Erro ao excluir despesa', 'error');
+                }
+            }
+        }
+
+        // Withdrawals
+        async function loadWithdrawals() {
+            try {
+                const data = await fetchApi('/withdrawals');
+                const html = `
+                    <div class="space-y-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h1 class="text-3xl font-bold">Retiradas</h1>
+                                <p class="text-gray-400 mt-1">Gerenciar retiradas de lucro</p>
+                            </div>
+                            <button onclick="showNewWithdrawalForm()" class="btn btn-primary">
+                                <i class="fas fa-plus mr-2"></i>
+                                Nova Retirada
+                            </button>
+                        </div>
+
+                        <div class="card p-6">
+                            <div class="overflow-x-auto">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Valor</th>
+                                            <th>Parte</th>
+                                            <th>Descrição</th>
+                                            <th>Data</th>
+                                            <th>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${data.withdrawals.length === 0 ? 
+                                            '<tr><td colspan="5" class="text-center py-8 text-gray-400">Nenhuma retirada encontrada</td></tr>' :
+                                            data.withdrawals.map(withdrawal => `
+                                                <tr>
+                                                    <td class="font-bold text-yellow-400">R$ ${withdrawal.amount.toFixed(2)}</td>
+                                                    <td class="font-medium">${withdrawal.part_type === 'part1' ? partNames.part1 : partNames.part2}</td>
+                                                    <td class="text-gray-300">${withdrawal.description || '-'}</td>
+                                                    <td class="text-gray-300">${new Date(withdrawal.created_at).toLocaleDateString('pt-BR')}</td>
+                                                    <td>
+                                                        <button onclick="deleteWithdrawal(${withdrawal.id})" class="btn btn-danger btn-sm">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            `).join('')
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('content').innerHTML = html;
+            } catch (error) {
+                showNotification('Erro ao carregar retiradas', 'error');
+            }
+        }
+
+        function showNewWithdrawalForm() {
+            const html = `
+                <div class="modal" id="withdrawalModal" style="display: flex;">
+                    <div class="modal-content">
+                        <div class="flex items-center mb-6">
+                            <i class="fas fa-hand-holding-usd text-yellow-400 text-xl mr-3"></i>
+                            <h3 class="text-lg font-bold">Nova Retirada</h3>
+                        </div>
+                        <form id="withdrawalForm" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Valor</label>
+                                <input type="number" step="0.01" id="withdrawalAmount" class="input" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Parte</label>
+                                <select id="withdrawalPart" class="input" required>
+                                    <option value="">Selecione...</option>
+                                    <option value="part1">${partNames.part1}</option>
+                                    <option value="part2">${partNames.part2}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Descrição (opcional)</label>
+                                <input type="text" id="withdrawalDescription" class="input">
+                            </div>
+                            <div class="flex space-x-2 pt-4">
+                                <button type="submit" class="btn btn-success flex-1">
+                                    <i class="fas fa-save mr-2"></i>
+                                    Salvar
+                                </button>
+                                <button type="button" onclick="closeModal('withdrawalModal')" class="btn btn-secondary flex-1">
+                                    Cancelar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', html);
+            setupWithdrawalForm();
+        }
+
+        function setupWithdrawalForm() {
+            document.getElementById('withdrawalForm').onsubmit = async (e) => {
+                e.preventDefault();
+                const withdrawalData = {
+                    amount: parseFloat(document.getElementById('withdrawalAmount').value),
+                    part_type: document.getElementById('withdrawalPart').value,
+                    description: document.getElementById('withdrawalDescription').value
+                };
+                
+                try {
+                    await fetchApi('/withdrawals', {
+                        method: 'POST',
+                        body: JSON.stringify(withdrawalData)
+                    });
+                    closeModal('withdrawalModal');
+                    showNotification('Retirada registrada com sucesso!');
+                    loadWithdrawals();
+                } catch (error) {
+                    showNotification('Erro ao registrar retirada', 'error');
+                }
+            };
+        }
+
+        async function deleteWithdrawal(id) {
+            if (confirm('Tem certeza que deseja excluir esta retirada?')) {
+                try {
+                    await fetchApi(`/withdrawals/${id}`, { method: 'DELETE' });
+                    showNotification('Retirada excluída com sucesso!');
+                    loadWithdrawals();
+                } catch (error) {
+                    showNotification('Erro ao excluir retirada', 'error');
+                }
+            }
+        }
+
+        // Appointments
+        async function loadAppointments() {
+            try {
+                const data = await fetchApi('/appointments');
+                const html = `
+                    <div class="space-y-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h1 class="text-3xl font-bold">Agendamentos</h1>
+                                <p class="text-gray-400 mt-1">Gerenciar seus agendamentos</p>
+                            </div>
+                            <button onclick="showNewAppointmentForm()" class="btn btn-primary">
+                                <i class="fas fa-plus mr-2"></i>
+                                Novo Agendamento
+                            </button>
+                        </div>
+
+                        <div class="card p-6">
+                            <div class="overflow-x-auto">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Data</th>
+                                            <th>Horário</th>
+                                            <th>Cliente</th>
+                                            <th>Serviço</th>
+                                            <th>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${data.appointments.length === 0 ? 
+                                            '<tr><td colspan="5" class="text-center py-8 text-gray-400">Nenhum agendamento encontrado</td></tr>' :
+                                            data.appointments.map(appointment => `
+                                                <tr>
+                                                    <td class="font-medium">${new Date(appointment.date).toLocaleDateString('pt-BR')}</td>
+                                                    <td>${appointment.time}</td>
+                                                    <td class="font-semibold">${appointment.client}</td>
+                                                    <td class="text-gray-300">${appointment.service}</td>
+                                                    <td>
+                                                        <button onclick="deleteAppointment(${appointment.id})" class="btn btn-danger btn-sm">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            `).join('')
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('content').innerHTML = html;
+            } catch (error) {
+                showNotification('Erro ao carregar agendamentos', 'error');
+            }
+        }
+
+        function showNewAppointmentForm() {
+            const html = `
+                <div class="modal" id="appointmentModal" style="display: flex;">
+                    <div class="modal-content">
+                        <div class="flex items-center mb-6">
+                            <i class="fas fa-calendar text-indigo-400 text-xl mr-3"></i>
+                            <h3 class="text-lg font-bold">Novo Agendamento</h3>
+                        </div>
+                        <form id="appointmentForm" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Data</label>
+                                <input type="date" id="appointmentDate" class="input" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Horário</label>
+                                <input type="time" id="appointmentTime" class="input" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Cliente</label>
+                                <input type="text" id="appointmentClient" class="input" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Serviço</label>
+                                <input type="text" id="appointmentService" class="input" required>
+                            </div>
+                            <div class="flex space-x-2 pt-4">
+                                <button type="submit" class="btn btn-success flex-1">
+                                    <i class="fas fa-save mr-2"></i>
+                                    Salvar
+                                </button>
+                                <button type="button" onclick="closeModal('appointmentModal')" class="btn btn-secondary flex-1">
+                                    Cancelar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', html);
+            
+            // Set today's date as default
+            document.getElementById('appointmentDate').value = new Date().toISOString().split('T')[0];
+            setupAppointmentForm();
+        }
+
+        function setupAppointmentForm() {
+            document.getElementById('appointmentForm').onsubmit = async (e) => {
+                e.preventDefault();
+                const appointmentData = {
+                    date: document.getElementById('appointmentDate').value,
+                    time: document.getElementById('appointmentTime').value,
+                    client: document.getElementById('appointmentClient').value,
+                    service: document.getElementById('appointmentService').value
+                };
+                
+                try {
+                    await fetchApi('/appointments', {
+                        method: 'POST',
+                        body: JSON.stringify(appointmentData)
+                    });
+                    closeModal('appointmentModal');
+                    showNotification('Agendamento criado com sucesso!');
+                    loadAppointments();
+                } catch (error) {
+                    showNotification('Erro ao criar agendamento', 'error');
+                }
+            };
+        }
+
+        async function deleteAppointment(id) {
+            if (confirm('Tem certeza que deseja excluir este agendamento?')) {
+                try {
+                    await fetchApi(`/appointments/${id}`, { method: 'DELETE' });
+                    showNotification('Agendamento excluído com sucesso!');
+                    loadAppointments();
+                } catch (error) {
+                    showNotification('Erro ao excluir agendamento', 'error');
+                }
+            }
+        }
+
+        // Settings
+        async function loadSettings() {
+            try {
+                const user = JSON.parse(localStorage.getItem('user'));
+                const html = `
+                    <div class="space-y-6">
+                        <div>
+                            <h1 class="text-3xl font-bold">Configurações</h1>
+                            <p class="text-gray-400 mt-1">Gerenciar suas configurações pessoais</p>
+                        </div>
+
+                        <div class="card p-6">
+                            <h3 class="text-xl font-bold mb-6">Informações Pessoais</h3>
+                            <form id="settingsForm" class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-300 mb-2">Nome</label>
+                                    <input type="text" id="settingsName" value="${user.name}" class="input" required>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-300 mb-2">Email</label>
+                                    <input type="email" id="settingsEmail" value="${user.email || ''}" class="input" required>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-300 mb-2">Nova Senha (deixe em branco para manter a atual)</label>
+                                    <input type="password" id="settingsPassword" class="input">
+                                </div>
+                                <button type="submit" class="btn btn-success">
+                                    <i class="fas fa-save mr-2"></i>
+                                    Salvar Configurações
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('content').innerHTML = html;
+                setupSettingsForm();
+            } catch (error) {
+                showNotification('Erro ao carregar configurações', 'error');
+            }
+        }
+
+        function setupSettingsForm() {
+            document.getElementById('settingsForm').onsubmit = async (e) => {
+                e.preventDefault();
+                const settings = {
+                    name: document.getElementById('settingsName').value,
+                    email: document.getElementById('settingsEmail').value,
+                    password: document.getElementById('settingsPassword').value
+                };
+                
+                try {
+                    const data = await fetchApi('/settings', {
+                        method: 'PUT',
+                        body: JSON.stringify(settings)
+                    });
+                    
+                    // Update localStorage with new user data
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    currentUser = data.user;
+                    
+                    // Update sidebar
+                    document.getElementById('userName').textContent = currentUser.name;
+                    document.getElementById('userInitials').textContent = currentUser.name.charAt(0).toUpperCase();
+                    
+                    showNotification('Configurações atualizadas com sucesso!');
+                } catch (error) {
+                    showNotification('Erro ao atualizar configurações', 'error');
+                }
+            };
+        }
+
+        // Close Period
+        async function closePeriod() {
+            if (confirm('Tem certeza que deseja fechar o período atual? Esta ação não pode ser desfeita.')) {
+                try {
+                    await fetchApi('/periods/close', { method: 'POST' });
+                    showNotification('Período fechado com sucesso!');
+                    loadDashboard();
+                } catch (error) {
+                    showNotification('Erro ao fechar período', 'error');
+                }
+            }
+        }
+
+        // WhatsApp Share
+        async function shareWhatsApp() {
+            try {
+                const data = await fetchApi('/dashboard');
+                const message = `📊 *Relatório de Serviços*\n\n` +
+                    `🔧 *Serviços Ativos:* ${data.activeServicesCount}\n` +
+                    `💰 *Receita Total:* R$ ${data.totalRevenue.toFixed(2)}\n` +
+                    `💸 *Despesas Totais:* R$ ${data.totalExpenses.toFixed(2)}\n` +
+                    `📈 *Lucro Total:* R$ ${data.totalProfit.toFixed(2)}\n\n` +
+                    `*Divisão de Lucros:*\n` +
+                    `👤 *${partNames.part1}:* R$ ${((data.totalProfit / 2) - data.withdrawals.part1).toFixed(2)} disponível\n` +
+                    `👤 *${partNames.part2}:* R$ ${((data.totalProfit / 2) - data.withdrawals.part2).toFixed(2)} disponível\n\n` +
+                    `📅 *Gerado em:* ${new Date().toLocaleDateString('pt-BR')}`;
+                
+                const encodedMessage = encodeURIComponent(message);
+                window.open(`https://wa.me/?text=${encodedMessage}`, '_blank');
+            } catch (error) {
+                showNotification('Erro ao gerar relatório', 'error');
+            }
+        }
+
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.remove();
+            }
+        }
+
+        // Section Loading
+        async function loadSection(section) {
+            setActiveNav(section);
+            switch (section) {
+                case 'dashboard':
+                    await loadDashboard();
+                    break;
+                case 'services':
+                    await loadServices();
+                    break;
+                case 'expenses':
+                    await loadExpenses();
+                    break;
+                case 'withdrawals':
+                    await loadWithdrawals();
+                    break;
+                case 'appointments':
+                    await loadAppointments();
+                    break;
+                case 'settings':
+                    await loadSettings();
+                    break;
+            }
+        }
+
+        // Initialization
+        window.onload = async () => {
+            if (await checkAuth()) {
+                await loadDashboard();
+            }
+        };
+
+        // Mobile detection and redirect
+        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+            window.location.href = '/mobile';
+        }
+    </script>
+</body>
+</html>
