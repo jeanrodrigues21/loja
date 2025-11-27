@@ -4,20 +4,32 @@ const fs = require('fs');
 
 const uploadDir = process.env.UPLOAD_PATH || 'uploads';
 
+// Create uploads directory if it doesn't exist
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
+// Configure storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, uploadDir);
+    // Create user-specific subdirectory
+    const userDir = path.join(uploadDir, req.user.id.toString());
+    
+    if (!fs.existsSync(userDir)) {
+      fs.mkdirSync(userDir, { recursive: true });
+    }
+    
+    cb(null, userDir);
   },
   filename: (req, file, cb) => {
+    // Generate unique filename
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    const ext = path.extname(file.originalname);
+    cb(null, 'image-' + uniqueSuffix + ext);
   }
 });
 
+// File filter to accept only images
 const fileFilter = (req, file, cb) => {
   const allowedTypes = /jpeg|jpg|png|gif|webp/;
   const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
@@ -30,6 +42,7 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
+// Configure multer
 const upload = multer({
   storage: storage,
   limits: {

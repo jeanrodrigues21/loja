@@ -1,0 +1,1583 @@
+=== FILE: package.json ===
+{
+  "name": "servicos-api",
+  "version": "1.0.0",
+  "description": "API REST para gerenciamento de serviços automotivos",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "migrate": "node src/migrations/migrate.js"
+  },
+  "keywords": ["api", "rest", "services", "automotive"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-validator": "^7.0.1",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "sqlite3": "^5.1.7"
+  }
+}
+
+
+
+=== FILE: src/config/database.js ===
+const { createClient } = require('@supabase/supabase-js');
+
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  throw new Error('Missing Supabase environment variables');
+}
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  }
+);
+
+const supabaseClient = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
+
+module.exports = {
+  supabase,
+  supabaseClient
+};
+
+
+
+=== FILE: src/config/jwt.js ===
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET is not defined in environment variables');
+}
+
+const generateToken = (payload) => {
+  return jwt.sign(payload, JWT_SECRET, {
+    expiresIn: JWT_EXPIRES_IN,
+    issuer: 'servicos-api'
+  });
+};
+
+const verifyToken = (token) => {
+  try {
+    return jwt.verify(token, JWT_SECRET, {
+      issuer: 'servicos-api'
+    });
+  } catch (error) {
+    throw new Error('Invalid or expired token');
+  }
+};
+
+const decodeToken = (token) => {
+  return jwt.decode(token);
+};
+
+module.exports = {
+  generateToken,
+  verifyToken,
+  decodeToken
+};
+
+
+
+=== FILE: src/controllers/authController.js ===
+const bcrypt = require('bcryptjs');
+const { supabase } = require('../config/database');
+const { generateToken } = require('../config/jwt');
+
+const register = async (req, res, next) => {
+  try {
+    const { username, password, name, email } = req.body;
+
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('username', username)
+      .maybeSingle();
+
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username already exists'
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const { data: newUser, error } = await supabase
+      .from('users')
+      .insert([{
+        username,
+        password: hashedPassword,
+        name,
+        email: email || null,
+        role: 'user'
+      }])
+      .select('id, username, name, email, role')
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const token = generateToken({ userId: newUser.id, role: newUser.role });
+
+    res.status(201).json({
+      success: true,
+      message: 'User registered successfully',
+      data: {
+        user: newUser,
+        token
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const login = async (req, res, next) => {
+  try {
+    const { username, password } = req.body;
+
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('username', username)
+      .maybeSingle();
+
+    if (error || !user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid username or password'
+      });
+    }
+
+    const isValidPassword = await bcrypt.compare(password, user.password);
+
+    if (!isValidPassword) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid username or password'
+      });
+    }
+
+    const token = generateToken({ userId: user.id, role: user.role });
+
+    const { password: _, ...userWithoutPassword } = user;
+
+    res.json({
+      success: true,
+      message: 'Login successful',
+      data: {
+        user: userWithoutPassword,
+        token
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getProfile = async (req, res, next) => {
+  try {
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, username, name, email, role, created_at')
+      .eq('id', req.user.id)
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    res.json({
+      success: true,
+      data: { user }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateProfile = async (req, res, next) => {
+  try {
+    const { name, email, password } = req.body;
+    const updateData = { name, email };
+
+    if (password) {
+      updateData.password = await bcrypt.hash(password, 10);
+    }
+
+    const { data: updatedUser, error } = await supabase
+      .from('users')
+      .update(updateData)
+      .eq('id', req.user.id)
+      .select('id, username, name, email, role')
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      data: { user: updatedUser }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  register,
+  login,
+  getProfile,
+  updateProfile
+};
+
+
+
+=== FILE: src/controllers/dashboardController.js ===
+const { supabase } = require('../config/database');
+
+const getDashboard = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    const { data: activeServices, error: servicesError } = await supabase
+      .from('services')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false });
+
+    if (servicesError) {
+      throw new Error(servicesError.message);
+    }
+
+    const { data: revenueData } = await supabase
+      .from('services')
+      .select('price')
+      .eq('user_id', userId)
+      .eq('status', 'active');
+
+    const totalRevenue = revenueData?.reduce((sum, s) => sum + (s.price || 0), 0) || 0;
+
+    const { data: expensesData } = await supabase
+      .from('expenses')
+      .select('amount')
+      .eq('user_id', userId)
+      .eq('status', 'active');
+
+    const totalExpenses = expensesData?.reduce((sum, e) => sum + (e.amount || 0), 0) || 0;
+
+    const { data: withdrawalsData } = await supabase
+      .from('withdrawals')
+      .select('amount, part_type')
+      .eq('user_id', userId);
+
+    const withdrawals = {
+      part1: 0,
+      part2: 0
+    };
+
+    withdrawalsData?.forEach(w => {
+      if (w.part_type === 'part1') withdrawals.part1 += w.amount || 0;
+      if (w.part_type === 'part2') withdrawals.part2 += w.amount || 0;
+    });
+
+    const today = new Date().toISOString().split('T')[0];
+    const { data: todaysAppointments } = await supabase
+      .from('appointments')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('date', today)
+      .order('time', { ascending: true });
+
+    res.json({
+      success: true,
+      data: {
+        activeServicesCount: activeServices?.length || 0,
+        totalRevenue,
+        totalExpenses,
+        totalProfit: totalRevenue - totalExpenses,
+        withdrawals,
+        services: activeServices || [],
+        todaysAppointments: todaysAppointments || []
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getServiceHistory = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    const { data: allServices, error: servicesError } = await supabase
+      .from('services')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (servicesError) {
+      throw new Error(servicesError.message);
+    }
+
+    const { data: allExpenses } = await supabase
+      .from('expenses')
+      .select('amount')
+      .eq('user_id', userId);
+
+    const totalRevenue = allServices?.reduce((sum, s) => sum + (s.price || 0), 0) || 0;
+    const totalExpenses = allExpenses?.reduce((sum, e) => sum + (e.amount || 0), 0) || 0;
+
+    const servicesByStatus = {};
+    allServices?.forEach(service => {
+      const status = service.status || 'unknown';
+      servicesByStatus[status] = (servicesByStatus[status] || 0) + 1;
+    });
+
+    res.json({
+      success: true,
+      data: {
+        totalServices: allServices?.length || 0,
+        totalRevenue,
+        totalExpenses,
+        totalBalance: totalRevenue - totalExpenses,
+        servicesByStatus,
+        services: allServices || []
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  getDashboard,
+  getServiceHistory
+};
+
+
+
+=== FILE: src/controllers/expensesController.js ===
+const { supabase } = require('../config/database');
+
+const getAllExpenses = async (req, res, next) => {
+  try {
+    const { status } = req.query;
+    let query = supabase
+      .from('expenses')
+      .select('*')
+      .eq('user_id', req.user.id)
+      .order('date', { ascending: false });
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    const { data: expenses, error } = await query;
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    res.json({
+      success: true,
+      data: { expenses }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const createExpense = async (req, res, next) => {
+  try {
+    const { description, amount, date } = req.body;
+
+    const { data: newExpense, error } = await supabase
+      .from('expenses')
+      .insert([{
+        description,
+        amount: parseFloat(amount),
+        date,
+        status: 'active',
+        user_id: req.user.id
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Expense created successfully',
+      data: { expense: newExpense }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const deleteExpense = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const { error } = await supabase
+      .from('expenses')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', req.user.id);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    res.json({
+      success: true,
+      message: 'Expense deleted successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  getAllExpenses,
+  createExpense,
+  deleteExpense
+};
+
+
+
+=== FILE: src/controllers/imagesController.js ===
+const { supabase } = require('../config/database');
+const fs = require('fs').promises;
+const path = require('path');
+
+const uploadImage = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded'
+      });
+    }
+
+    const filePath = req.file.path;
+    const fileName = req.file.filename;
+    const fileBuffer = await fs.readFile(filePath);
+
+    const bucketName = 'service-images';
+    const storagePath = `${req.user.id}/${fileName}`;
+
+    const { data, error } = await supabase.storage
+      .from(bucketName)
+      .upload(storagePath, fileBuffer, {
+        contentType: req.file.mimetype,
+        upsert: false
+      });
+
+    if (error) {
+      await fs.unlink(filePath);
+      throw new Error(error.message);
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from(bucketName)
+      .getPublicUrl(storagePath);
+
+    const { data: imageRecord, error: dbError } = await supabase
+      .from('images')
+      .insert([{
+        user_id: req.user.id,
+        file_name: fileName,
+        file_path: storagePath,
+        url: publicUrlData.publicUrl,
+        mime_type: req.file.mimetype,
+        size: req.file.size
+      }])
+      .select()
+      .single();
+
+    if (dbError) {
+      throw new Error(dbError.message);
+    }
+
+    await fs.unlink(filePath);
+
+    res.status(201).json({
+      success: true,
+      message: 'Image uploaded successfully',
+      data: { image: imageRecord }
+    });
+  } catch (error) {
+    if (req.file) {
+      try {
+        await fs.unlink(req.file.path);
+      } catch (unlinkError) {
+        console.error('Error deleting file:', unlinkError);
+      }
+    }
+    next(error);
+  }
+};
+
+const getUserImages = async (req, res, next) => {
+  try {
+    const { data: images, error } = await supabase
+      .from('images')
+      .select('*')
+      .eq('user_id', req.user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    res.json({
+      success: true,
+      data: { images }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const deleteImage = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const { data: image, error: fetchError } = await supabase
+      .from('images')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', req.user.id)
+      .maybeSingle();
+
+    if (fetchError) {
+      throw new Error(fetchError.message);
+    }
+
+    if (!image) {
+      return res.status(404).json({
+        success: false,
+        message: 'Image not found'
+      });
+    }
+
+    const bucketName = 'service-images';
+    const { error: storageError } = await supabase.storage
+      .from(bucketName)
+      .remove([image.file_path]);
+
+    if (storageError) {
+      console.error('Storage deletion error:', storageError);
+    }
+
+    const { error: deleteError } = await supabase
+      .from('images')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', req.user.id);
+
+    if (deleteError) {
+      throw new Error(deleteError.message);
+    }
+
+    res.json({
+      success: true,
+      message: 'Image deleted successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  uploadImage,
+  getUserImages,
+  deleteImage
+};
+
+
+
+=== FILE: src/controllers/servicesController.js ===
+const { supabase } = require('../config/database');
+
+const getAllServices = async (req, res, next) => {
+  try {
+    const { status } = req.query;
+    let query = supabase
+      .from('services')
+      .select('*')
+      .eq('user_id', req.user.id)
+      .order('created_at', { ascending: false });
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    const { data: services, error } = await query;
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    res.json({
+      success: true,
+      data: { services }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getServiceById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const { data: service, error } = await supabase
+      .from('services')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', req.user.id)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (!service) {
+      return res.status(404).json({
+        success: false,
+        message: 'Service not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { service }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const createService = async (req, res, next) => {
+  try {
+    const { description, vehicle, price } = req.body;
+
+    const { data: newService, error } = await supabase
+      .from('services')
+      .insert([{
+        description,
+        vehicle,
+        price: parseFloat(price),
+        status: 'active',
+        user_id: req.user.id
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Service created successfully',
+      data: { service: newService }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateService = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { description, vehicle, price, status } = req.body;
+
+    const updateData = {};
+    if (description !== undefined) updateData.description = description;
+    if (vehicle !== undefined) updateData.vehicle = vehicle;
+    if (price !== undefined) updateData.price = parseFloat(price);
+    if (status !== undefined) updateData.status = status;
+
+    const { data: updatedService, error } = await supabase
+      .from('services')
+      .update(updateData)
+      .eq('id', id)
+      .eq('user_id', req.user.id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (!updatedService) {
+      return res.status(404).json({
+        success: false,
+        message: 'Service not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Service updated successfully',
+      data: { service: updatedService }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const deleteService = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const { error } = await supabase
+      .from('services')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', req.user.id);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    res.json({
+      success: true,
+      message: 'Service deleted successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  getAllServices,
+  getServiceById,
+  createService,
+  updateService,
+  deleteService
+};
+
+
+
+=== FILE: src/middleware/auth.js ===
+const { verifyToken } = require('../config/jwt');
+const { supabase } = require('../config/database');
+
+const authenticate = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        message: 'Access token is missing or invalid'
+      });
+    }
+
+    const token = authHeader.substring(7);
+
+    const decoded = verifyToken(token);
+
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, username, name, email, role')
+      .eq('id', decoded.userId)
+      .maybeSingle();
+
+    if (error || !user) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not found or invalid token'
+      });
+    }
+
+    req.user = user;
+    next();
+  } catch (error) {
+    return res.status(401).json({
+      success: false,
+      message: error.message || 'Authentication failed'
+    });
+  }
+};
+
+const requireAdmin = (req, res, next) => {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. Admin privileges required.'
+    });
+  }
+  next();
+};
+
+const optionalAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      const decoded = verifyToken(token);
+
+      const { data: user } = await supabase
+        .from('users')
+        .select('id, username, name, email, role')
+        .eq('id', decoded.userId)
+        .maybeSingle();
+
+      if (user) {
+        req.user = user;
+      }
+    }
+  } catch (error) {
+    // Ignore authentication errors for optional auth
+  }
+  next();
+};
+
+module.exports = {
+  authenticate,
+  requireAdmin,
+  optionalAuth
+};
+
+
+
+=== FILE: src/middleware/errorHandler.js ===
+const errorHandler = (err, req, res, next) => {
+  console.error('Error:', err);
+
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation error',
+      errors: Object.values(err.errors).map(e => e.message)
+    });
+  }
+
+  if (err.name === 'JsonWebTokenError') {
+    return res.status(401).json({
+      success: false,
+      message: 'Invalid token'
+    });
+  }
+
+  if (err.name === 'TokenExpiredError') {
+    return res.status(401).json({
+      success: false,
+      message: 'Token expired'
+    });
+  }
+
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).json({
+      success: false,
+      message: 'File size exceeds the maximum allowed limit'
+    });
+  }
+
+  const statusCode = err.statusCode || 500;
+  const message = err.message || 'Internal server error';
+
+  res.status(statusCode).json({
+    success: false,
+    message: message,
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
+};
+
+module.exports = errorHandler;
+
+
+
+=== FILE: src/middleware/upload.js ===
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const uploadDir = process.env.UPLOAD_PATH || 'uploads';
+
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = /jpeg|jpg|png|gif|webp/;
+  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+  const mimetype = allowedTypes.test(file.mimetype);
+
+  if (mimetype && extname) {
+    return cb(null, true);
+  } else {
+    cb(new Error('Only image files are allowed (jpeg, jpg, png, gif, webp)'));
+  }
+};
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: parseInt(process.env.MAX_FILE_SIZE) || 5 * 1024 * 1024 // 5MB default
+  },
+  fileFilter: fileFilter
+});
+
+module.exports = upload;
+
+
+
+=== FILE: src/middleware/validator.js ===
+const { validationResult } = require('express-validator');
+
+const validate = (req, res, next) => {
+  const errors = validationResult(req);
+
+  if (!errors.isEmpty()) {
+    const extractedErrors = errors.array().map(err => ({
+      field: err.path,
+      message: err.msg
+    }));
+
+    return res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors: extractedErrors
+    });
+  }
+
+  next();
+};
+
+module.exports = { validate };
+
+
+
+=== FILE: src/migrations/schema.sql ===
+/*
+  # Database Schema for Servicos Gerenciamento API
+
+  1. Tables
+    - users: User accounts with authentication
+    - services: Service records
+    - expenses: Expense records
+    - appointments: Appointment scheduling
+    - withdrawals: Withdrawal records
+    - closed_periods: Historical period data
+    - system_settings: System configuration
+    - images: Image storage metadata
+
+  2. Security
+    - Enable RLS on all tables
+    - Add policies for authenticated users
+    - Secure data access by user_id
+*/
+
+-- Users table
+CREATE TABLE IF NOT EXISTS users (
+  id BIGSERIAL PRIMARY KEY,
+  username TEXT UNIQUE NOT NULL,
+  password TEXT NOT NULL,
+  name TEXT NOT NULL,
+  email TEXT,
+  role TEXT DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can read own data"
+  ON users FOR SELECT
+  TO authenticated
+  USING (auth.uid()::text = id::text);
+
+CREATE POLICY "Users can update own data"
+  ON users FOR UPDATE
+  TO authenticated
+  USING (auth.uid()::text = id::text)
+  WITH CHECK (auth.uid()::text = id::text);
+
+-- Services table
+CREATE TABLE IF NOT EXISTS services (
+  id BIGSERIAL PRIMARY KEY,
+  description TEXT NOT NULL,
+  vehicle TEXT NOT NULL,
+  price DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'completed', 'cancelled')),
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_services_user_id ON services(user_id);
+CREATE INDEX idx_services_status ON services(status);
+
+ALTER TABLE services ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own services"
+  ON services FOR SELECT
+  TO authenticated
+  USING (user_id = auth.uid()::bigint);
+
+CREATE POLICY "Users can create own services"
+  ON services FOR INSERT
+  TO authenticated
+  WITH CHECK (user_id = auth.uid()::bigint);
+
+CREATE POLICY "Users can update own services"
+  ON services FOR UPDATE
+  TO authenticated
+  USING (user_id = auth.uid()::bigint)
+  WITH CHECK (user_id = auth.uid()::bigint);
+
+CREATE POLICY "Users can delete own services"
+  ON services FOR DELETE
+  TO authenticated
+  USING (user_id = auth.uid()::bigint);
+
+-- Expenses table
+CREATE TABLE IF NOT EXISTS expenses (
+  id BIGSERIAL PRIMARY KEY,
+  description TEXT NOT NULL,
+  amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  date DATE NOT NULL,
+  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'closed')),
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_expenses_user_id ON expenses(user_id);
+CREATE INDEX idx_expenses_date ON expenses(date);
+
+ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own expenses"
+  ON expenses FOR SELECT
+  TO authenticated
+  USING (user_id = auth.uid()::bigint);
+
+CREATE POLICY "Users can create own expenses"
+  ON expenses FOR INSERT
+  TO authenticated
+  WITH CHECK (user_id = auth.uid()::bigint);
+
+CREATE POLICY "Users can update own expenses"
+  ON expenses FOR UPDATE
+  TO authenticated
+  USING (user_id = auth.uid()::bigint)
+  WITH CHECK (user_id = auth.uid()::bigint);
+
+CREATE POLICY "Users can delete own expenses"
+  ON expenses FOR DELETE
+  TO authenticated
+  USING (user_id = auth.uid()::bigint);
+
+-- Appointments table
+CREATE TABLE IF NOT EXISTS appointments (
+  id BIGSERIAL PRIMARY KEY,
+  date DATE NOT NULL,
+  time TIME NOT NULL,
+  client TEXT NOT NULL,
+  service TEXT NOT NULL,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_appointments_user_id ON appointments(user_id);
+CREATE INDEX idx_appointments_date ON appointments(date);
+
+ALTER TABLE appointments ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own appointments"
+  ON appointments FOR SELECT
+  TO authenticated
+  USING (user_id = auth.uid()::bigint);
+
+CREATE POLICY "Users can create own appointments"
+  ON appointments FOR INSERT
+  TO authenticated
+  WITH CHECK (user_id = auth.uid()::bigint);
+
+CREATE POLICY "Users can delete own appointments"
+  ON appointments FOR DELETE
+  TO authenticated
+  USING (user_id = auth.uid()::bigint);
+
+-- Withdrawals table
+CREATE TABLE IF NOT EXISTS withdrawals (
+  id BIGSERIAL PRIMARY KEY,
+  amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  part_type TEXT NOT NULL CHECK (part_type IN ('part1', 'part2')),
+  description TEXT,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_withdrawals_user_id ON withdrawals(user_id);
+
+ALTER TABLE withdrawals ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own withdrawals"
+  ON withdrawals FOR SELECT
+  TO authenticated
+  USING (user_id = auth.uid()::bigint);
+
+CREATE POLICY "Users can create own withdrawals"
+  ON withdrawals FOR INSERT
+  TO authenticated
+  WITH CHECK (user_id = auth.uid()::bigint);
+
+CREATE POLICY "Users can delete own withdrawals"
+  ON withdrawals FOR DELETE
+  TO authenticated
+  USING (user_id = auth.uid()::bigint);
+
+-- Closed periods table
+CREATE TABLE IF NOT EXISTS closed_periods (
+  id BIGSERIAL PRIMARY KEY,
+  total_services INTEGER DEFAULT 0,
+  total_value DECIMAL(10, 2) DEFAULT 0,
+  total_expenses DECIMAL(10, 2) DEFAULT 0,
+  net_total DECIMAL(10, 2) DEFAULT 0,
+  period_start DATE,
+  period_end DATE,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_closed_periods_user_id ON closed_periods(user_id);
+
+ALTER TABLE closed_periods ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own closed periods"
+  ON closed_periods FOR SELECT
+  TO authenticated
+  USING (user_id = auth.uid()::bigint);
+
+CREATE POLICY "Users can create own closed periods"
+  ON closed_periods FOR INSERT
+  TO authenticated
+  WITH CHECK (user_id = auth.uid()::bigint);
+
+-- System settings table
+CREATE TABLE IF NOT EXISTS system_settings (
+  id BIGSERIAL PRIMARY KEY,
+  setting_key TEXT UNIQUE NOT NULL,
+  setting_value TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE system_settings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can read settings"
+  ON system_settings FOR SELECT
+  TO authenticated
+  USING (true);
+
+CREATE POLICY "Only admins can update settings"
+  ON system_settings FOR UPDATE
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM users
+      WHERE id = auth.uid()::bigint AND role = 'admin'
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM users
+      WHERE id = auth.uid()::bigint AND role = 'admin'
+    )
+  );
+
+-- Images table
+CREATE TABLE IF NOT EXISTS images (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  file_name TEXT NOT NULL,
+  file_path TEXT NOT NULL,
+  url TEXT NOT NULL,
+  mime_type TEXT,
+  size INTEGER,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_images_user_id ON images(user_id);
+
+ALTER TABLE images ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own images"
+  ON images FOR SELECT
+  TO authenticated
+  USING (user_id = auth.uid()::bigint);
+
+CREATE POLICY "Users can create own images"
+  ON images FOR INSERT
+  TO authenticated
+  WITH CHECK (user_id = auth.uid()::bigint);
+
+CREATE POLICY "Users can delete own images"
+  ON images FOR DELETE
+  TO authenticated
+  USING (user_id = auth.uid()::bigint);
+
+-- Insert default system settings
+INSERT INTO system_settings (setting_key, setting_value) VALUES
+  ('part1_name', 'Instalador'),
+  ('part2_name', 'Oficina')
+ON CONFLICT (setting_key) DO NOTHING;
+
+
+
+=== FILE: src/routes/authRoutes.js ===
+const express = require('express');
+const { body } = require('express-validator');
+const { validate } = require('../middleware/validator');
+const { authenticate } = require('../middleware/auth');
+const {
+  register,
+  login,
+  getProfile,
+  updateProfile
+} = require('../controllers/authController');
+
+const router = express.Router();
+
+router.post(
+  '/register',
+  [
+    body('username').trim().isLength({ min: 3 }).withMessage('Username must be at least 3 characters'),
+    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+    body('name').trim().notEmpty().withMessage('Name is required'),
+    body('email').optional().isEmail().withMessage('Invalid email format'),
+    validate
+  ],
+  register
+);
+
+router.post(
+  '/login',
+  [
+    body('username').trim().notEmpty().withMessage('Username is required'),
+    body('password').notEmpty().withMessage('Password is required'),
+    validate
+  ],
+  login
+);
+
+router.get('/profile', authenticate, getProfile);
+
+router.put(
+  '/profile',
+  authenticate,
+  [
+    body('name').optional().trim().notEmpty().withMessage('Name cannot be empty'),
+    body('email').optional().isEmail().withMessage('Invalid email format'),
+    body('password').optional().isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+    validate
+  ],
+  updateProfile
+);
+
+module.exports = router;
+
+
+
+=== FILE: src/routes/dashboardRoutes.js ===
+const express = require('express');
+const { authenticate } = require('../middleware/auth');
+const {
+  getDashboard,
+  getServiceHistory
+} = require('../controllers/dashboardController');
+
+const router = express.Router();
+
+router.use(authenticate);
+
+router.get('/', getDashboard);
+router.get('/history', getServiceHistory);
+
+module.exports = router;
+
+
+
+=== FILE: src/routes/expensesRoutes.js ===
+const express = require('express');
+const { body, param } = require('express-validator');
+const { validate } = require('../middleware/validator');
+const { authenticate } = require('../middleware/auth');
+const {
+  getAllExpenses,
+  createExpense,
+  deleteExpense
+} = require('../controllers/expensesController');
+
+const router = express.Router();
+
+router.use(authenticate);
+
+router.get('/', getAllExpenses);
+
+router.post(
+  '/',
+  [
+    body('description').trim().notEmpty().withMessage('Description is required'),
+    body('amount').isFloat({ min: 0 }).withMessage('Amount must be a positive number'),
+    body('date').isISO8601().withMessage('Invalid date format'),
+    validate
+  ],
+  createExpense
+);
+
+router.delete(
+  '/:id',
+  [
+    param('id').isInt().withMessage('Invalid expense ID'),
+    validate
+  ],
+  deleteExpense
+);
+
+module.exports = router;
+
+
+
+=== FILE: src/routes/imagesRoutes.js ===
+const express = require('express');
+const { param } = require('express-validator');
+const { validate } = require('../middleware/validator');
+const { authenticate } = require('../middleware/auth');
+const upload = require('../middleware/upload');
+const {
+  uploadImage,
+  getUserImages,
+  deleteImage
+} = require('../controllers/imagesController');
+
+const router = express.Router();
+
+router.use(authenticate);
+
+router.post('/upload', upload.single('image'), uploadImage);
+
+router.get('/', getUserImages);
+
+router.delete(
+  '/:id',
+  [
+    param('id').isInt().withMessage('Invalid image ID'),
+    validate
+  ],
+  deleteImage
+);
+
+module.exports = router;
+
+
+
+=== FILE: src/routes/servicesRoutes.js ===
+const express = require('express');
+const { body, param } = require('express-validator');
+const { validate } = require('../middleware/validator');
+const { authenticate } = require('../middleware/auth');
+const {
+  getAllServices,
+  getServiceById,
+  createService,
+  updateService,
+  deleteService
+} = require('../controllers/servicesController');
+
+const router = express.Router();
+
+router.use(authenticate);
+
+router.get('/', getAllServices);
+
+router.get(
+  '/:id',
+  [
+    param('id').isInt().withMessage('Invalid service ID'),
+    validate
+  ],
+  getServiceById
+);
+
+router.post(
+  '/',
+  [
+    body('description').trim().notEmpty().withMessage('Description is required'),
+    body('vehicle').trim().notEmpty().withMessage('Vehicle is required'),
+    body('price').isFloat({ min: 0 }).withMessage('Price must be a positive number'),
+    validate
+  ],
+  createService
+);
+
+router.put(
+  '/:id',
+  [
+    param('id').isInt().withMessage('Invalid service ID'),
+    body('description').optional().trim().notEmpty().withMessage('Description cannot be empty'),
+    body('vehicle').optional().trim().notEmpty().withMessage('Vehicle cannot be empty'),
+    body('price').optional().isFloat({ min: 0 }).withMessage('Price must be a positive number'),
+    body('status').optional().isIn(['active', 'completed', 'cancelled']).withMessage('Invalid status'),
+    validate
+  ],
+  updateService
+);
+
+router.delete(
+  '/:id',
+  [
+    param('id').isInt().withMessage('Invalid service ID'),
+    validate
+  ],
+  deleteService
+);
+
+module.exports = router;
+
+
+
+=== FILE: src/server.js ===
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const errorHandler = require('./middleware/errorHandler');
+
+const authRoutes = require('./routes/authRoutes');
+const servicesRoutes = require('./routes/servicesRoutes');
+const expensesRoutes = require('./routes/expensesRoutes');
+const dashboardRoutes = require('./routes/dashboardRoutes');
+const imagesRoutes = require('./routes/imagesRoutes');
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
+
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'];
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
+
+app.use(morgan('combined'));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+app.get('/health', (req, res) => {
+  res.json({
+    success: true,
+    message: 'API is running',
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.use('/api/auth', authRoutes);
+app.use('/api/services', servicesRoutes);
+app.use('/api/expenses', expensesRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/images', imagesRoutes);
+
+app.use('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Route not found'
+  });
+});
+
+app.use(errorHandler);
+
+const startServer = async () => {
+  try {
+    console.log('Starting API server...');
+
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`
+========================================
+  API Server Running
+========================================
+  Port: ${PORT}
+  Environment: ${process.env.NODE_ENV || 'development'}
+  URL: http://localhost:${PORT}
+  Health: http://localhost:${PORT}/health
+========================================
+      `);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+process.on('SIGINT', () => {
+  console.log('\nShutting down server...');
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.log('\nShutting down server...');
+  process.exit(0);
+});
+
+startServer();
+
+module.exports = app;
+
+
+

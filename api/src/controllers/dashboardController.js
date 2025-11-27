@@ -1,69 +1,62 @@
-const { supabase } = require('../config/database');
+const db = require('../config/database');
 
 const getDashboard = async (req, res, next) => {
   try {
     const userId = req.user.id;
 
-    const { data: activeServices, error: servicesError } = await supabase
-      .from('services')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false });
+    // Get active services
+    const [activeServices] = await db.query(
+      'SELECT * FROM services WHERE user_id = ? AND status = ? ORDER BY created_at DESC',
+      [userId, 'active']
+    );
 
-    if (servicesError) {
-      throw new Error(servicesError.message);
-    }
+    // Calculate total revenue from active services
+    const [revenueData] = await db.query(
+      'SELECT COALESCE(SUM(price), 0) as total FROM services WHERE user_id = ? AND status = ?',
+      [userId, 'active']
+    );
+    const totalRevenue = parseFloat(revenueData[0].total);
 
-    const { data: revenueData } = await supabase
-      .from('services')
-      .select('price')
-      .eq('user_id', userId)
-      .eq('status', 'active');
+    // Calculate total expenses
+    const [expensesData] = await db.query(
+      'SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE user_id = ? AND status = ?',
+      [userId, 'active']
+    );
+    const totalExpenses = parseFloat(expensesData[0].total);
 
-    const totalRevenue = revenueData?.reduce((sum, s) => sum + (s.price || 0), 0) || 0;
-
-    const { data: expensesData } = await supabase
-      .from('expenses')
-      .select('amount')
-      .eq('user_id', userId)
-      .eq('status', 'active');
-
-    const totalExpenses = expensesData?.reduce((sum, e) => sum + (e.amount || 0), 0) || 0;
-
-    const { data: withdrawalsData } = await supabase
-      .from('withdrawals')
-      .select('amount, part_type')
-      .eq('user_id', userId);
+    // Get withdrawals by part type
+    const [withdrawalsData] = await db.query(
+      'SELECT part_type, COALESCE(SUM(amount), 0) as total FROM withdrawals WHERE user_id = ? GROUP BY part_type',
+      [userId]
+    );
 
     const withdrawals = {
       part1: 0,
       part2: 0
     };
 
-    withdrawalsData?.forEach(w => {
-      if (w.part_type === 'part1') withdrawals.part1 += w.amount || 0;
-      if (w.part_type === 'part2') withdrawals.part2 += w.amount || 0;
+    withdrawalsData.forEach(w => {
+      if (w.part_type === 'part1') withdrawals.part1 = parseFloat(w.total);
+      if (w.part_type === 'part2') withdrawals.part2 = parseFloat(w.total);
     });
 
+    // Get today's appointments
     const today = new Date().toISOString().split('T')[0];
-    const { data: todaysAppointments } = await supabase
-      .from('appointments')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('date', today)
-      .order('time', { ascending: true });
+    const [todaysAppointments] = await db.query(
+      'SELECT * FROM appointments WHERE user_id = ? AND date = ? ORDER BY time ASC',
+      [userId, today]
+    );
 
     res.json({
       success: true,
       data: {
-        activeServicesCount: activeServices?.length || 0,
+        activeServicesCount: activeServices.length,
         totalRevenue,
         totalExpenses,
         totalProfit: totalRevenue - totalExpenses,
         withdrawals,
-        services: activeServices || [],
-        todaysAppointments: todaysAppointments || []
+        services: activeServices,
+        todaysAppointments
       }
     });
   } catch (error) {
@@ -75,39 +68,46 @@ const getServiceHistory = async (req, res, next) => {
   try {
     const userId = req.user.id;
 
-    const { data: allServices, error: servicesError } = await supabase
-      .from('services')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+    // Get all services
+    const [allServices] = await db.query(
+      'SELECT * FROM services WHERE user_id = ? ORDER BY created_at DESC',
+      [userId]
+    );
 
-    if (servicesError) {
-      throw new Error(servicesError.message);
-    }
+    // Calculate total revenue from all services
+    const [revenueData] = await db.query(
+      'SELECT COALESCE(SUM(price), 0) as total FROM services WHERE user_id = ?',
+      [userId]
+    );
+    const totalRevenue = parseFloat(revenueData[0].total);
 
-    const { data: allExpenses } = await supabase
-      .from('expenses')
-      .select('amount')
-      .eq('user_id', userId);
+    // Calculate total expenses
+    const [expensesData] = await db.query(
+      'SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE user_id = ?',
+      [userId]
+    );
+    const totalExpenses = parseFloat(expensesData[0].total);
 
-    const totalRevenue = allServices?.reduce((sum, s) => sum + (s.price || 0), 0) || 0;
-    const totalExpenses = allExpenses?.reduce((sum, e) => sum + (e.amount || 0), 0) || 0;
+    // Get services count by status
+    const [statusData] = await db.query(
+      'SELECT status, COUNT(*) as count FROM services WHERE user_id = ? GROUP BY status',
+      [userId]
+    );
 
     const servicesByStatus = {};
-    allServices?.forEach(service => {
-      const status = service.status || 'unknown';
-      servicesByStatus[status] = (servicesByStatus[status] || 0) + 1;
+    statusData.forEach(item => {
+      servicesByStatus[item.status] = parseInt(item.count);
     });
 
     res.json({
       success: true,
       data: {
-        totalServices: allServices?.length || 0,
+        totalServices: allServices.length,
         totalRevenue,
         totalExpenses,
         totalBalance: totalRevenue - totalExpenses,
         servicesByStatus,
-        services: allServices || []
+        services: allServices
       }
     });
   } catch (error) {

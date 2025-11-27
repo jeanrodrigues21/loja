@@ -1,42 +1,40 @@
 const bcrypt = require('bcryptjs');
-const { supabase } = require('../config/database');
+const db = require('../config/database');
 const { generateToken } = require('../config/jwt');
 
 const register = async (req, res, next) => {
   try {
     const { username, password, name, email } = req.body;
 
-    const { data: existingUser } = await supabase
-      .from('users')
-      .select('id')
-      .eq('username', username)
-      .maybeSingle();
+    // Check if username exists
+    const [existingUsers] = await db.query(
+      'SELECT id FROM users WHERE username = ?',
+      [username]
+    );
 
-    if (existingUser) {
+    if (existingUsers.length > 0) {
       return res.status(400).json({
         success: false,
         message: 'Username already exists'
       });
     }
 
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const { data: newUser, error } = await supabase
-      .from('users')
-      .insert([{
-        username,
-        password: hashedPassword,
-        name,
-        email: email || null,
-        role: 'user'
-      }])
-      .select('id, username, name, email, role')
-      .single();
+    // Insert new user
+    const [result] = await db.query(
+      'INSERT INTO users (username, password, name, email, role) VALUES (?, ?, ?, ?, ?)',
+      [username, hashedPassword, name, email || null, 'user']
+    );
 
-    if (error) {
-      throw new Error(error.message);
-    }
+    // Get created user
+    const [users] = await db.query(
+      'SELECT id, username, name, email, role FROM users WHERE id = ?',
+      [result.insertId]
+    );
 
+    const newUser = users[0];
     const token = generateToken({ userId: newUser.id, role: newUser.role });
 
     res.status(201).json({
@@ -56,19 +54,22 @@ const login = async (req, res, next) => {
   try {
     const { username, password } = req.body;
 
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('username', username)
-      .maybeSingle();
+    // Get user by username
+    const [users] = await db.query(
+      'SELECT * FROM users WHERE username = ?',
+      [username]
+    );
 
-    if (error || !user) {
+    if (users.length === 0) {
       return res.status(401).json({
         success: false,
         message: 'Invalid username or password'
       });
     }
 
+    const user = users[0];
+
+    // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password);
 
     if (!isValidPassword) {
@@ -78,8 +79,10 @@ const login = async (req, res, next) => {
       });
     }
 
+    // Generate token
     const token = generateToken({ userId: user.id, role: user.role });
 
+    // Remove password from response
     const { password: _, ...userWithoutPassword } = user;
 
     res.json({
@@ -97,19 +100,21 @@ const login = async (req, res, next) => {
 
 const getProfile = async (req, res, next) => {
   try {
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('id, username, name, email, role, created_at')
-      .eq('id', req.user.id)
-      .single();
+    const [users] = await db.query(
+      'SELECT id, username, name, email, role, created_at FROM users WHERE id = ?',
+      [req.user.id]
+    );
 
-    if (error) {
-      throw new Error(error.message);
+    if (users.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
     }
 
     res.json({
       success: true,
-      data: { user }
+      data: { user: users[0] }
     });
   } catch (error) {
     next(error);
@@ -119,27 +124,49 @@ const getProfile = async (req, res, next) => {
 const updateProfile = async (req, res, next) => {
   try {
     const { name, email, password } = req.body;
-    const updateData = { name, email };
+    const updates = [];
+    const values = [];
+
+    if (name !== undefined) {
+      updates.push('name = ?');
+      values.push(name);
+    }
+
+    if (email !== undefined) {
+      updates.push('email = ?');
+      values.push(email);
+    }
 
     if (password) {
-      updateData.password = await bcrypt.hash(password, 10);
+      const hashedPassword = await bcrypt.hash(password, 10);
+      updates.push('password = ?');
+      values.push(hashedPassword);
     }
 
-    const { data: updatedUser, error } = await supabase
-      .from('users')
-      .update(updateData)
-      .eq('id', req.user.id)
-      .select('id, username, name, email, role')
-      .single();
-
-    if (error) {
-      throw new Error(error.message);
+    if (updates.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No fields to update'
+      });
     }
+
+    values.push(req.user.id);
+
+    await db.query(
+      `UPDATE users SET ${updates.join(', ')} WHERE id = ?`,
+      values
+    );
+
+    // Get updated user
+    const [users] = await db.query(
+      'SELECT id, username, name, email, role FROM users WHERE id = ?',
+      [req.user.id]
+    );
 
     res.json({
       success: true,
       message: 'Profile updated successfully',
-      data: { user: updatedUser }
+      data: { user: users[0] }
     });
   } catch (error) {
     next(error);

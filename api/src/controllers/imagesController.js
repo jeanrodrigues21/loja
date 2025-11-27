@@ -1,4 +1,4 @@
-const { supabase } = require('../config/database');
+const db = require('../config/database');
 const fs = require('fs').promises;
 const path = require('path');
 
@@ -11,54 +11,28 @@ const uploadImage = async (req, res, next) => {
       });
     }
 
-    const filePath = req.file.path;
     const fileName = req.file.filename;
-    const fileBuffer = await fs.readFile(filePath);
+    const filePath = req.file.path;
+    const fileUrl = `/uploads/${fileName}`;
 
-    const bucketName = 'service-images';
-    const storagePath = `${req.user.id}/${fileName}`;
+    // Save image metadata to database
+    const [result] = await db.query(
+      'INSERT INTO images (user_id, file_name, file_path, url, mime_type, size) VALUES (?, ?, ?, ?, ?, ?)',
+      [req.user.id, fileName, filePath, fileUrl, req.file.mimetype, req.file.size]
+    );
 
-    const { data, error } = await supabase.storage
-      .from(bucketName)
-      .upload(storagePath, fileBuffer, {
-        contentType: req.file.mimetype,
-        upsert: false
-      });
-
-    if (error) {
-      await fs.unlink(filePath);
-      throw new Error(error.message);
-    }
-
-    const { data: publicUrlData } = supabase.storage
-      .from(bucketName)
-      .getPublicUrl(storagePath);
-
-    const { data: imageRecord, error: dbError } = await supabase
-      .from('images')
-      .insert([{
-        user_id: req.user.id,
-        file_name: fileName,
-        file_path: storagePath,
-        url: publicUrlData.publicUrl,
-        mime_type: req.file.mimetype,
-        size: req.file.size
-      }])
-      .select()
-      .single();
-
-    if (dbError) {
-      throw new Error(dbError.message);
-    }
-
-    await fs.unlink(filePath);
+    const [images] = await db.query(
+      'SELECT * FROM images WHERE id = ?',
+      [result.insertId]
+    );
 
     res.status(201).json({
       success: true,
       message: 'Image uploaded successfully',
-      data: { image: imageRecord }
+      data: { image: images[0] }
     });
   } catch (error) {
+    // Clean up file if database operation fails
     if (req.file) {
       try {
         await fs.unlink(req.file.path);
@@ -72,15 +46,10 @@ const uploadImage = async (req, res, next) => {
 
 const getUserImages = async (req, res, next) => {
   try {
-    const { data: images, error } = await supabase
-      .from('images')
-      .select('*')
-      .eq('user_id', req.user.id)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      throw new Error(error.message);
-    }
+    const [images] = await db.query(
+      'SELECT * FROM images WHERE user_id = ? ORDER BY created_at DESC',
+      [req.user.id]
+    );
 
     res.json({
       success: true,
@@ -95,42 +64,33 @@ const deleteImage = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const { data: image, error: fetchError } = await supabase
-      .from('images')
-      .select('*')
-      .eq('id', id)
-      .eq('user_id', req.user.id)
-      .maybeSingle();
+    // Get image details
+    const [images] = await db.query(
+      'SELECT * FROM images WHERE id = ? AND user_id = ?',
+      [id, req.user.id]
+    );
 
-    if (fetchError) {
-      throw new Error(fetchError.message);
-    }
-
-    if (!image) {
+    if (images.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'Image not found'
       });
     }
 
-    const bucketName = 'service-images';
-    const { error: storageError } = await supabase.storage
-      .from(bucketName)
-      .remove([image.file_path]);
+    const image = images[0];
 
-    if (storageError) {
-      console.error('Storage deletion error:', storageError);
+    // Delete file from filesystem
+    try {
+      await fs.unlink(image.file_path);
+    } catch (unlinkError) {
+      console.error('Error deleting file:', unlinkError);
     }
 
-    const { error: deleteError } = await supabase
-      .from('images')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', req.user.id);
-
-    if (deleteError) {
-      throw new Error(deleteError.message);
-    }
+    // Delete from database
+    await db.query(
+      'DELETE FROM images WHERE id = ? AND user_id = ?',
+      [id, req.user.id]
+    );
 
     res.json({
       success: true,

@@ -1,23 +1,19 @@
-const { supabase } = require('../config/database');
+const db = require('../config/database');
 
 const getAllExpenses = async (req, res, next) => {
   try {
     const { status } = req.query;
-    let query = supabase
-      .from('expenses')
-      .select('*')
-      .eq('user_id', req.user.id)
-      .order('date', { ascending: false });
+    let query = 'SELECT * FROM expenses WHERE user_id = ?';
+    const params = [req.user.id];
 
     if (status) {
-      query = query.eq('status', status);
+      query += ' AND status = ?';
+      params.push(status);
     }
 
-    const { data: expenses, error } = await query;
+    query += ' ORDER BY date DESC';
 
-    if (error) {
-      throw new Error(error.message);
-    }
+    const [expenses] = await db.query(query, params);
 
     res.json({
       success: true,
@@ -32,26 +28,20 @@ const createExpense = async (req, res, next) => {
   try {
     const { description, amount, date } = req.body;
 
-    const { data: newExpense, error } = await supabase
-      .from('expenses')
-      .insert([{
-        description,
-        amount: parseFloat(amount),
-        date,
-        status: 'active',
-        user_id: req.user.id
-      }])
-      .select()
-      .single();
+    const [result] = await db.query(
+      'INSERT INTO expenses (description, amount, date, status, user_id) VALUES (?, ?, ?, ?, ?)',
+      [description, parseFloat(amount), date, 'active', req.user.id]
+    );
 
-    if (error) {
-      throw new Error(error.message);
-    }
+    const [expenses] = await db.query(
+      'SELECT * FROM expenses WHERE id = ?',
+      [result.insertId]
+    );
 
     res.status(201).json({
       success: true,
       message: 'Expense created successfully',
-      data: { expense: newExpense }
+      data: { expense: expenses[0] }
     });
   } catch (error) {
     next(error);
@@ -62,14 +52,16 @@ const deleteExpense = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const { error } = await supabase
-      .from('expenses')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', req.user.id);
+    const [result] = await db.query(
+      'DELETE FROM expenses WHERE id = ? AND user_id = ?',
+      [id, req.user.id]
+    );
 
-    if (error) {
-      throw new Error(error.message);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Expense not found'
+      });
     }
 
     res.json({

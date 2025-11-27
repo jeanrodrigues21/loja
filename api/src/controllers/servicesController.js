@@ -1,23 +1,19 @@
-const { supabase } = require('../config/database');
+const db = require('../config/database');
 
 const getAllServices = async (req, res, next) => {
   try {
     const { status } = req.query;
-    let query = supabase
-      .from('services')
-      .select('*')
-      .eq('user_id', req.user.id)
-      .order('created_at', { ascending: false });
+    let query = 'SELECT * FROM services WHERE user_id = ?';
+    const params = [req.user.id];
 
     if (status) {
-      query = query.eq('status', status);
+      query += ' AND status = ?';
+      params.push(status);
     }
 
-    const { data: services, error } = await query;
+    query += ' ORDER BY created_at DESC';
 
-    if (error) {
-      throw new Error(error.message);
-    }
+    const [services] = await db.query(query, params);
 
     res.json({
       success: true,
@@ -32,18 +28,12 @@ const getServiceById = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const { data: service, error } = await supabase
-      .from('services')
-      .select('*')
-      .eq('id', id)
-      .eq('user_id', req.user.id)
-      .maybeSingle();
+    const [services] = await db.query(
+      'SELECT * FROM services WHERE id = ? AND user_id = ?',
+      [id, req.user.id]
+    );
 
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    if (!service) {
+    if (services.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'Service not found'
@@ -52,7 +42,7 @@ const getServiceById = async (req, res, next) => {
 
     res.json({
       success: true,
-      data: { service }
+      data: { service: services[0] }
     });
   } catch (error) {
     next(error);
@@ -63,26 +53,20 @@ const createService = async (req, res, next) => {
   try {
     const { description, vehicle, price } = req.body;
 
-    const { data: newService, error } = await supabase
-      .from('services')
-      .insert([{
-        description,
-        vehicle,
-        price: parseFloat(price),
-        status: 'active',
-        user_id: req.user.id
-      }])
-      .select()
-      .single();
+    const [result] = await db.query(
+      'INSERT INTO services (description, vehicle, price, status, user_id) VALUES (?, ?, ?, ?, ?)',
+      [description, vehicle, parseFloat(price), 'active', req.user.id]
+    );
 
-    if (error) {
-      throw new Error(error.message);
-    }
+    const [services] = await db.query(
+      'SELECT * FROM services WHERE id = ?',
+      [result.insertId]
+    );
 
     res.status(201).json({
       success: true,
       message: 'Service created successfully',
-      data: { service: newService }
+      data: { service: services[0] }
     });
   } catch (error) {
     next(error);
@@ -94,35 +78,59 @@ const updateService = async (req, res, next) => {
     const { id } = req.params;
     const { description, vehicle, price, status } = req.body;
 
-    const updateData = {};
-    if (description !== undefined) updateData.description = description;
-    if (vehicle !== undefined) updateData.vehicle = vehicle;
-    if (price !== undefined) updateData.price = parseFloat(price);
-    if (status !== undefined) updateData.status = status;
+    const updates = [];
+    const values = [];
 
-    const { data: updatedService, error } = await supabase
-      .from('services')
-      .update(updateData)
-      .eq('id', id)
-      .eq('user_id', req.user.id)
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(error.message);
+    if (description !== undefined) {
+      updates.push('description = ?');
+      values.push(description);
     }
 
-    if (!updatedService) {
+    if (vehicle !== undefined) {
+      updates.push('vehicle = ?');
+      values.push(vehicle);
+    }
+
+    if (price !== undefined) {
+      updates.push('price = ?');
+      values.push(parseFloat(price));
+    }
+
+    if (status !== undefined) {
+      updates.push('status = ?');
+      values.push(status);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No fields to update'
+      });
+    }
+
+    values.push(id, req.user.id);
+
+    const [result] = await db.query(
+      `UPDATE services SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`,
+      values
+    );
+
+    if (result.affectedRows === 0) {
       return res.status(404).json({
         success: false,
         message: 'Service not found'
       });
     }
 
+    const [services] = await db.query(
+      'SELECT * FROM services WHERE id = ?',
+      [id]
+    );
+
     res.json({
       success: true,
       message: 'Service updated successfully',
-      data: { service: updatedService }
+      data: { service: services[0] }
     });
   } catch (error) {
     next(error);
@@ -133,14 +141,16 @@ const deleteService = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const { error } = await supabase
-      .from('services')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', req.user.id);
+    const [result] = await db.query(
+      'DELETE FROM services WHERE id = ? AND user_id = ?',
+      [id, req.user.id]
+    );
 
-    if (error) {
-      throw new Error(error.message);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Service not found'
+      });
     }
 
     res.json({

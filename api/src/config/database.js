@@ -1,26 +1,31 @@
-const { createClient } = require('@supabase/supabase-js');
+const mysql = require('mysql2/promise');
 
-if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error('Missing Supabase environment variables');
+if (!process.env.DB_HOST || !process.env.DB_USER || !process.env.DB_PASSWORD || !process.env.DB_NAME) {
+  throw new Error('Missing MySQL database environment variables');
 }
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-);
+const pool = mysql.createPool({
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT || 3306,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0
+});
 
-const supabaseClient = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
-);
+// Test connection
+pool.getConnection()
+  .then(connection => {
+    console.log('✓ MySQL database connected successfully');
+    connection.release();
+  })
+  .catch(err => {
+    console.error('✗ MySQL connection error:', err.message);
+    process.exit(1);
+  });
 
-module.exports = {
-  supabase,
-  supabaseClient
-};
+module.exports = pool;
